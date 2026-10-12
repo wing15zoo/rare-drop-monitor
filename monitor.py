@@ -21,6 +21,7 @@ import re
 import sys
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -131,7 +132,9 @@ def check_jsonld(p):
     else:
         vals = re.findall(r'availability\\?"?\s*:\s*\\?"([^"\\]+)', r.text, re.I)
     if vals:
-        status = vals[0].rsplit("/", 1)[-1].lower() in IN_STATES  # 1er = produit principal
+        state = vals[0].rsplit("/", 1)[-1].lower()  # 1er = produit principal
+        status = state in IN_STATES
+        p["_avail"] = "Précommande" if state in ("preorder", "presale") else "En stock"
     else:
         status = False  # page retiree / sans offre
     img = None
@@ -162,14 +165,21 @@ def send_discord(payload):
 
 def alert(p, price, image):
     role = p.get("role_id") or os.environ.get("DISCORD_ROLE_ID")
+    name = re.sub(r"^\d+\s*·\s*", "", p["name"])  # retire le numero de priorite
+    price_fr = price.replace(".", ",") if price else "?"
+    heure = datetime.now(ZoneInfo("Europe/Paris")).strftime("%H:%M:%S")
     embed = {
-        "title": f"🚨 EN STOCK : {p['name']}",
+        "title": "🚨 RESTOCK DÉTECTÉ",
         "url": p["url"],
-        "color": 0x2ECC71,
-        "fields": [
-            {"name": "Boutique", "value": p.get("shop", "?"), "inline": True},
-            {"name": "Prix", "value": price or "?", "inline": True},
-        ],
+        "color": 0xE74C3C,
+        "description": (
+            f"**{name}**\n\n"
+            f"🏪 Boutique : {p.get('shop', '?')}\n"
+            f"💰 Prix : {price_fr}\n"
+            f"📦 Disponibilité : {p.get('_avail', 'En stock')}\n"
+            f"🕒 Détection : {heure}\n"
+            f"🔗 [Voir le produit]({p['url']})"
+        ),
         "footer": {"text": "RARE DROP monitor"},
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -217,6 +227,13 @@ def run_once(products, state):
 def main():
     products = load_json(PRODUCTS_FILE, [])
     state = load_json(STATE_FILE, {})
+
+    if "--test-alert" in sys.argv:
+        alert({"name": "ETB Pokémon 30ᵉ Anniversaire — FR", "shop": "Boutique A",
+               "url": products[0]["url"] if products else "https://www.play-in.com"},
+              "59.99 € (exemple)", None)
+        log("Alerte de test envoyee")
+        return
 
     if "--test" in sys.argv:
         send_discord({"content": "✅ Test RARE DROP monitor : le webhook fonctionne."})
