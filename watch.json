@@ -70,7 +70,10 @@
       "https://www.ultrajeux.com/type-468-4-pokemon.html"
     ],
     "link_pattern": "produit-\\d+-[^\"'#?]+\\.html",
-    "match": "anniversaire|c[ée]l[ée]bration|prismatique|\\b151\\b"
+    "match": "anniversaire|c[ée]l[ée]bration|prismatique|\\b151\\b",
+    "out_of_stock_if": [
+      "Alertez-moi"
+    ]
   },
   {
     "shop": "Pokuji",
@@ -84,7 +87,9 @@
       "prismatiques",
       "151",
       "display"
-    ]
+    ],
+    "disabled": true,
+    "note": "403 depuis les serveurs GitHub (anti-bot)"
   },
   {
     "shop": "LordTCG",

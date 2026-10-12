@@ -140,6 +140,8 @@ def check_jsonld(p):
     if vals:
         state = vals[0].rsplit("/", 1)[-1].lower()  # 1er = produit principal
         status = state in IN_STATES
+        if status and any(k in r.text for k in p.get("out_of_stock_if", [])):
+            status = False  # ex. UltraJeux : "InStock" = dispo en magasin, pas en ligne
         p["_avail"] = "Précommande" if state in ("preorder", "presale") else "En stock"
     else:
         status = False  # page retiree / sans offre
@@ -185,7 +187,8 @@ MATCHERS = {
     "Poster 30 ans": rf"^(?=.*poster)(?=.*{A30})",
     "ETB Évolutions Prismatiques": r"^(?=.*(dresseur d.?[ée]lite|\betb\b))(?=.*prismatique)",
     "Bundle 151": r"^(?=.*bundle)(?=.*151)",
-    "Display Méga-Évolution": r"^(?=.*display)(?=.*m[ée]ga.?[ée]volution)",
+    "Display Méga-Évolution": r"^(?=.*display)(?=.*m[ée]ga.?[ée]volution)"
+                              r"(?!.*(chaos|flamme|fantasmagori|[ée]quilibre|h[ée]ros|transcendant|nuit noire|r[èe]gne|delta))",
 }
 MATCHERS = {k: re.compile(v, re.I) for k, v in MATCHERS.items()}
 
@@ -236,6 +239,8 @@ def discover(w):
             time.sleep(random.uniform(0.5, 1.5))
     for u, d in found.items():
         d.update({"url": u, "shop": w["shop"]})
+        if w.get("out_of_stock_if"):
+            d["out_of_stock_if"] = w["out_of_stock_if"]
         if w.get("role_id"):
             d["role_id"] = w["role_id"]
     return found
