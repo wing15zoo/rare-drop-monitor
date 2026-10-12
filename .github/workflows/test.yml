@@ -12,6 +12,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests
-      - run: python monitor.py --test
+      - run: python monitor.py --test-alert
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
