@@ -1,0 +1,38 @@
+name: RARE DROP monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # minimum autorise par GitHub (souvent 5-15 min en pratique)
+  workflow_dispatch:         # bouton "Run workflow" pour lancer a la main
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write            # pour sauvegarder state.json
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Monitor (~4 min30, un passage par minute)
+        run: python monitor.py
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_ROLE_ID: ${{ secrets.DISCORD_ROLE_ID }}
+          RUN_FOR: "270"
+          INTERVAL: "60"
+      - name: Sauvegarde de l'etat
+        if: always()
+        run: |
+          git config user.name "rare-drop-bot"
+          git config user.email "rare-drop-bot@users.noreply.github.com"
+          git add state.json || true
+          git diff --cached --quiet || (git commit -m "state update" && git pull --rebase && git push)
