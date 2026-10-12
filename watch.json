@@ -1,0 +1,103 @@
+[
+  {
+    "shop": "PlayShop",
+    "type": "shopify",
+    "base": "https://playshop.fr",
+    "queries": [
+      "dresseur elite 30",
+      "etb 30",
+      "mini tin 30",
+      "bundle 30",
+      "ultra premium mentali",
+      "ultra premium noctali",
+      "ultra premium 30",
+      "collection figurine 30",
+      "figurine mewtwo",
+      "poster 30",
+      "dresseur elite prismatiques",
+      "etb prismatiques",
+      "bundle 151",
+      "display mega evolution"
+    ]
+  },
+  {
+    "shop": "VCollect",
+    "type": "shopify",
+    "base": "https://vcollect.fr",
+    "queries": [
+      "dresseur elite 30",
+      "etb 30",
+      "mini tin 30",
+      "bundle 30",
+      "ultra premium mentali",
+      "ultra premium noctali",
+      "ultra premium 30",
+      "collection figurine 30",
+      "figurine mewtwo",
+      "poster 30",
+      "dresseur elite prismatiques",
+      "etb prismatiques",
+      "bundle 151",
+      "display mega evolution"
+    ]
+  },
+  {
+    "shop": "Dragonfeu",
+    "type": "shopify",
+    "base": "https://dragonfeu.fr",
+    "queries": [
+      "dresseur elite 30",
+      "etb 30",
+      "mini tin 30",
+      "bundle 30",
+      "ultra premium mentali",
+      "ultra premium noctali",
+      "ultra premium 30",
+      "collection figurine 30",
+      "figurine mewtwo",
+      "poster 30",
+      "dresseur elite prismatiques",
+      "etb prismatiques",
+      "bundle 151",
+      "display mega evolution"
+    ]
+  },
+  {
+    "shop": "UltraJeux",
+    "type": "links",
+    "pages": [
+      "https://www.ultrajeux.com/jeu-4-pokemon.html",
+      "https://www.ultrajeux.com/type-468-4-pokemon.html"
+    ],
+    "link_pattern": "produit-\\d+-[^\"'#?]+\\.html",
+    "match": "anniversaire|c[ée]l[ée]bration|prismatique|\\b151\\b"
+  },
+  {
+    "shop": "Pokuji",
+    "type": "woo",
+    "base": "https://pokuji.fr",
+    "queries": [
+      "30",
+      "anniversaire",
+      "celebration",
+      "ultra",
+      "prismatiques",
+      "151",
+      "display"
+    ]
+  },
+  {
+    "shop": "LordTCG",
+    "type": "woo",
+    "base": "https://lordtcg.fr",
+    "queries": [
+      "30",
+      "anniversaire",
+      "celebration",
+      "ultra",
+      "prismatiques",
+      "151",
+      "display"
+    ]
+  }
+]

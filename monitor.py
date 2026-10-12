@@ -28,6 +28,7 @@ import requests
 HERE = os.path.dirname(os.path.abspath(__file__))
 PRODUCTS_FILE = os.path.join(HERE, "products.json")
 STATE_FILE = os.path.join(HERE, "state.json")
+WATCH_FILE = os.path.join(HERE, "watch.json")
 
 WEBHOOK = os.environ.get("DISCORD_WEBHOOK", "").strip()
 RUN_FOR = int(os.environ.get("RUN_FOR", "0"))
@@ -131,6 +132,11 @@ def check_jsonld(p):
             price = f"{float(m.group(1)):.2f} €"
     else:
         vals = re.findall(r'availability\\?"?\s*:\s*\\?"([^"\\]+)', r.text, re.I)
+        if not vals:  # microdata (UltraJeux...) : <meta itemprop="availability" content="InStock">
+            vals = re.findall(r'itemprop="availability"[^>]*?(?:content|href)="([^"]+)"', r.text)
+            m = re.search(r'itemprop="price"[^>]*?content="(\d+(?:\.\d+)?)"', r.text)
+            if m and float(m.group(1)) > 0:
+                price = f"{float(m.group(1)):.2f} €"
     if vals:
         state = vals[0].rsplit("/", 1)[-1].lower()  # 1er = produit principal
         status = state in IN_STATES
@@ -144,7 +150,100 @@ def check_jsonld(p):
     return status, price, img
 
 
-CHECKERS = {"jsonld": check_jsonld, "shopify": check_shopify, "keywords": check_keywords}
+def check_woo(p):
+    """Boutiques WooCommerce : API publique Store API (JSON fiable)."""
+    r = session.get(p["api"], timeout=20)
+    if r.status_code == 404:
+        return False, None, None
+    r.raise_for_status()
+    d = r.json()
+    pr = d.get("prices", {})
+    price = None
+    if pr.get("price"):
+        v = int(pr["price"]) / 10 ** int(pr.get("currency_minor_unit", 2))
+        price = f"{v:.2f} €" if v > 0 else None
+    img = (d.get("images") or [{}])[0].get("src")
+    return bool(d.get("is_in_stock") and d.get("is_purchasable")), price, img
+
+
+CHECKERS = {"jsonld": check_jsonld, "shopify": check_shopify,
+            "keywords": check_keywords, "woo": check_woo}
+
+
+# ---------- Decouverte automatique des fiches produits ----------
+# Chaque boutique de watch.json est scannee au debut de chaque run :
+# toute fiche dont le titre correspond a un de ces motifs est ajoutee a la surveillance.
+
+A30 = r"(30|anniv|c[ée]l[ée]bration)"
+MATCHERS = {
+    "ETB 30 ans": rf"^(?=.*(dresseur d.?[ée]lite|\betb\b))(?=.*{A30})",
+    "Mini-tin 30 ans": rf"^(?=.*mini.?tin)(?=.*{A30})",
+    "Bundle 30 ans": r"^(?=.*bundle)(?=.*(30 ?ans|30e|30ème|30ᵉ|anniv|c[ée]l[ée]bration))(?!.*151)",
+    "UPC Mentali": r"^(?=.*(ultra.?premium|\bupc\b))(?=.*(mentali|journ[ée]e))",
+    "UPC Noctali": r"^(?=.*(ultra.?premium|\bupc\b))(?=.*(noctali|soir[ée]e))",
+    "Figurine Mew/Mewtwo": rf"^(?=.*figurine)(?=.*mew)(?=.*{A30})",
+    "Poster 30 ans": rf"^(?=.*poster)(?=.*{A30})",
+    "ETB Évolutions Prismatiques": r"^(?=.*(dresseur d.?[ée]lite|\betb\b))(?=.*prismatique)",
+    "Bundle 151": r"^(?=.*bundle)(?=.*151)",
+    "Display Méga-Évolution": r"^(?=.*display)(?=.*m[ée]ga.?[ée]volution)",
+}
+MATCHERS = {k: re.compile(v, re.I) for k, v in MATCHERS.items()}
+
+
+def matches(title):
+    return any(rx.search(title) for rx in MATCHERS.values())
+
+
+def discover(w):
+    """Retourne les fiches (dict produit) trouvees pour une boutique de watch.json."""
+    found = {}
+    base = w.get("base", "").rstrip("/")
+    if w["type"] == "shopify":
+        for q in w["queries"]:
+            r = session.get(f"{base}/search/suggest.json", timeout=20, params={
+                "q": q, "resources[type]": "product", "resources[limit]": 10})
+            r.raise_for_status()
+            for it in r.json().get("resources", {}).get("results", {}).get("products", []):
+                if matches(it["title"]) and float(it.get("price") or 0) > 5:
+                    url = f"{base}/products/{it['handle']}"
+                    found[url] = {"name": it["title"], "type": "shopify"}
+            time.sleep(random.uniform(0.5, 1.5))
+    elif w["type"] == "woo":
+        for q in w["queries"]:
+            r = session.get(f"{base}/wp-json/wc/store/v1/products", timeout=20,
+                            params={"search": q, "per_page": 50})
+            r.raise_for_status()
+            for it in r.json():
+                name = html_unescape(it["name"])
+                v = int(it["prices"]["price"] or 0) / 10 ** int(it["prices"]["currency_minor_unit"])
+                if matches(name) and v > 5:
+                    found[it["permalink"]] = {"name": name, "type": "woo",
+                                              "api": f"{base}/wp-json/wc/store/v1/products/{it['id']}"}
+            time.sleep(random.uniform(0.5, 1.5))
+    elif w["type"] == "links":  # page categorie HTML -> liens produits
+        rx = re.compile(r'<a[^>]+href="([^"]*' + w["link_pattern"] + r')"[^>]*>(.*?)</a>', re.S | re.I)
+        # titres courts sur certaines boutiques -> filtre propre a la boutique si fourni
+        own = re.compile(w["match"], re.I) if w.get("match") else None
+        matches_ = (lambda t: own.search(t)) if own else matches
+        for page in w["pages"]:
+            r = session.get(page, timeout=20)
+            r.raise_for_status()
+            for href, inner in rx.findall(r.text):
+                name = html_unescape(re.sub(r"<[^>]+>|\s+", " ", inner)).strip()
+                if name and matches_(name):
+                    url = requests.compat.urljoin(page, href)
+                    found[url] = {"name": name, "type": "jsonld"}
+            time.sleep(random.uniform(0.5, 1.5))
+    for u, d in found.items():
+        d.update({"url": u, "shop": w["shop"]})
+        if w.get("role_id"):
+            d["role_id"] = w["role_id"]
+    return found
+
+
+def html_unescape(s):
+    import html
+    return html.unescape(s)
 
 
 # ---------- Discord ----------
@@ -210,7 +309,7 @@ def run_once(products, state):
         label = {True: "EN STOCK", False: "rupture", None: "inconnu"}[status]
         log(f"{p['name']}: {label}")
 
-        if status is True and prev is False:
+        if status is True and (prev is False or (prev is None and p.get("_new"))):
             max_price = p.get("max_price")
             value = float(price.split()[0]) if price else None
             if max_price and value and value > max_price:
@@ -220,8 +319,32 @@ def run_once(products, state):
                 alert(p, price, image)
         if status is not None:
             state[key] = {"status": status, "checked": int(time.time())}
-        time.sleep(random.uniform(1.5, 4))  # on reste poli avec les sites
+            p.pop("_new", None)
+        time.sleep(random.uniform(0.5, 1.5))  # on reste poli avec les sites
     save_json(STATE_FILE, state)
+
+
+def run_discovery(watch, state):
+    """Scanne les boutiques et renvoie la liste des fiches decouvertes (cumulees)."""
+    disc = state.setdefault("_discovered", {})
+    init = state.setdefault("_init", {})
+    for w in watch:
+        if w.get("disabled"):
+            continue
+        try:
+            found = discover(w)
+        except Exception as e:
+            log(f"⚠️  Decouverte {w['shop']}: {e}")
+            continue
+        new = [u for u in found if u not in disc]
+        for u in new:
+            found[u]["_new"] = init.get(w["shop"], False)  # 1er scan = reference, pas d'alerte
+            log(f"🆕 {w['shop']}: {found[u]['name']}")
+        disc.update(found)
+        init[w["shop"]] = True
+        log(f"Decouverte {w['shop']}: {len(found)} fiche(s), {len(new)} nouvelle(s)")
+    save_json(STATE_FILE, state)
+    return list(disc.values())
 
 
 def main():
@@ -239,6 +362,10 @@ def main():
         send_discord({"content": "✅ Test RARE DROP monitor : le webhook fonctionne."})
         log("Message de test envoye")
         return
+
+    watch = load_json(WATCH_FILE, [])
+    if watch:
+        products = products + run_discovery(watch, state)
 
     if "--once" in sys.argv:
         run_once(products, state)
