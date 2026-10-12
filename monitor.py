@@ -228,12 +228,13 @@ def discover(w):
         # titres courts sur certaines boutiques -> filtre propre a la boutique si fourni
         own = re.compile(w["match"], re.I) if w.get("match") else None
         matches_ = (lambda t: own.search(t)) if own else matches
+        excl = re.compile(w["exclude"], re.I) if w.get("exclude") else None
         for page in w["pages"]:
             r = session.get(page, timeout=20)
             r.raise_for_status()
             for href, inner in rx.findall(r.text):
                 name = html_unescape(re.sub(r"<[^>]+>|\s+", " ", inner)).strip()
-                if name and matches_(name):
+                if name and matches_(name) and not (excl and excl.search(name)):
                     url = requests.compat.urljoin(page, href)
                     found[url] = {"name": name, "type": "jsonld"}
             time.sleep(random.uniform(0.5, 1.5))

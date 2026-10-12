@@ -104,5 +104,14 @@
       "151",
       "display"
     ]
+  },
+  {
+    "shop": "InvestCollect",
+    "type": "links",
+    "pages": [
+      "https://investcollect.com/eshop/pokemon.html"
+    ],
+    "link_pattern": "/eshop/p/[^\"'#?]+\\.html",
+    "exclude": "\\bcase\\b|cr[ée]er une alerte"
   }
 ]
